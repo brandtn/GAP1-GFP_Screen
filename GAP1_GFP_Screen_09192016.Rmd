@@ -1,0 +1,402 @@
+---
+title: "Flow_Cytometry_GAP1:GFP Screen Analysis"
+author: "Nathan Brandt"
+date: "Sept 19th, 2016"
+output: html_document
+---
+#1) Two samples in four media types analyzed on the Accuri in triplicate .
+#    Strains-
+#     GAP1::GFP KO Collection Pool
+#     Strains have GFP fused with GAP1 and tdTomato expressed under the ACT1 promoter in the HO locus
+#    Media Types-
+#     SC
+#     Proline Limited Media
+#   Controls-
+#      FY4 in Proline Limited Media
+#      FY4 in SC Media
+#      GFP::GAP1 HISKO in Proline Limited Media
+#      GFP::GAP1 HISKO in SC Media
+
+###This code is designed for use with the Accuri flow cytometer, which is equiped with the following lasers and filters
+* Blue laser (488 nm)
+  + FL1 filter = 514/20nm   GFP
+  + FL3 filter = 575/25nm   YFP
+
+* Yellow/green laser (552 nm)
+  + FL2 filter = 610/20nm   mCherry, dtomato
+  + FL4 filter = 586/15nm   DsRed
+
+******
+##Step 1: Load relevant libraries 
+
+```{r}
+#Load libraries
+library(flowCore)
+library(flowViz)
+#library(flowQ) #Not Availible in R 3.3.1
+#library(flowStats) #Not Availible in R 3.3.2
+#library(Hmisc) #Not Availible in R 3.3.2
+library(reshape2)
+library(ggplot2)
+#library(flowWorkspace) #Not Availible in R 3.3.2
+#library(ggcyto) #Not Availible in R 3.3.2
+library(gridExtra)
+```
+
+###Step 2: Read in all .fcs files in current directory and a sample sheet that contains four columns with 
+* column1 = Well
+* column2 = Strain
+* column3 = Genotype
+* column4 = Ploidy
+* column5 = Media
+
+
+```{r}
+#Set working directory to the folder in which you have stored your .fcs files
+#Read in all the fcs files in the directory, with alter.ames changing "-" to "."
+
+#Variables for scanning through mulitple plates
+
+plate <- "14TestRun" #Plate number, under 10 need 0#
+condition <- "ProLim" #Media type and/or other conditions, SC or ProLim
+path.data <-"~/Google Drive/Transfer_Folder/GAP1_GFP_Screen/" #location of data files
+path.save <-"~/Google Drive/Transfer_Folder/GAP1_GFP_Screen/Reports"#location to save files
+
+  threshold.z_scores <- 2 # cutoff for z-scores to isolate
+  threshold.count <- 10000 # cutoff for number of events to isolate
+
+samplesize <- NULL #Number of Random Lines from the FSC files to read in, set to NULL to read all lines
+
+flowData <- read.flowSet(path = paste(path.data,"GAP1_GFP_Screen_FSC_Files/Plate",plate,"_",condition, sep=""), pattern=".fcs", which.lines=samplesize, alter.names=TRUE)
+
+sample.sheet <- read.csv(paste(path.data,"GAP1_GFP_Screen_DataSheets/Plate",plate,"_",condition,".csv", sep=""))
+```
+
+```{r}
+#Read in and parse OD files
+#Plate01 and Plate02 have no OD readings
+#Plate03 only has Ctrl OD readings for duplicates of FY4 and HIS3KO in rows A,B,F, and G
+#Ctrls are in triplicates
+#FY4 in Proline is in Column 04 Rows ABC
+#FY4 in SC is in Column 08 Rows ABC
+#DGY1215-HIS3KO in Proline is in Column 04 Rows FGH
+#DGY1215-HIS3KO in SC is in Column 08 Rows FGH
+
+od.ctrl.blank <-read.table(file=paste(path.data,"GAP1_GFP_Screen_ODs/Plate",plate,"_Ctrls_Blank.asc",sep=""), row.names=1, header=T)
+od.ctrl <-read.table(file=paste(path.data,"GAP1_GFP_Screen_ODs/Plate",plate,"_Ctrls.asc",sep=""), row.names=1, header=T)
+od.plate.blank <-read.table(file=paste(path.data,"GAP1_GFP_Screen_ODs/Plate",plate,"_",condition,"_Blank.asc",sep=""), row.names=1, header=T)
+od.plate <-read.table(file=paste(path.data,"GAP1_GFP_Screen_ODs/Plate",plate,"_",condition,".asc",sep=""), row.names=1, header=T)
+
+od.plate.adjust <- od.plate-od.plate.blank
+ctrl.od.adjust <- od.ctrl-od.ctrl.blank
+
+od.data <- data.frame(WELL=sample.sheet$Well, STRAIN=sample.sheet$Strain, OD=NA)
+
+#This code will input the correct ODs into the data.frame
+for(i in 1:96){
+  od.data$OD[i] <- as.list(t(od.plate.adjust))[i]
+}
+
+for(i in 1:((nrow(od.data)-96)/4)){
+   od.data$OD[93+(4*i)] <- ctrl.od.adjust[i,4]
+    od.data$OD[94+(4*i)] <- ctrl.od.adjust[i,8]
+    od.data$OD[95+(4*i)] <- ctrl.od.adjust[i+5,4]
+    od.data$OD[96+(4*i)] <- ctrl.od.adjust[i+5,8]
+}
+
+#cleans up the od data.frame
+od.data$OD <- as.numeric(od.data$OD)
+```
+
+#Gating of data, and filtering
+```{r}
+
+##Apply a rectangle gate based on FSC and SSC to remove values that we have determined are typically debris for haploid cells.  This should be adjusted if the cell type is different
+rectGate <- rectangleGate("FSC.A"= c(5.6,7.6),"SSC.A" = c(4.6,6.8))
+
+#Subset the filtered data to remove outliers defined by FFC and SSC 
+filterData <- flowData#Subset(flowData, rectGate) 
+```
+
+#Plot the rectangle gate used for filtering and determine the proportion of cells used for subsequent analysis
+```{r eval=FALSE}
+#Not currently using
+##Plot Foward vs. Scatter using ggcyto Use to help gate
+ggcyto(flowData, aes(x = FSC.A, y = SSC.A), )+
+  geom_hex(bins=512)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")
+ # scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)
+```
+
+###Plot an overview of the data
+```{r eval=FALSE}
+#Not currently using
+##Plot FL1(GFP) versus FSC 
+ggcyto(flowData[1], aes(x = FL1.A, y = FSC.A))+
+  geom_hex(bins=256)+
+  scale_x_log10()+
+  scale_y_log10()
+
+##Plot FFS versus SSC
+ggcyto(flowData[1], aes(x = SSC.A, y = FSC.A))+
+  geom_hex(bins=256)+
+  scale_x_log10()+
+  scale_y_log10()
+
+```
+
+
+#Transfer data into a dataframe and produce summary stats
+```{r}
+#Summary Statistics of Normalized Filtered Data
+#Move filtered data into a dataframe
+filter.data <- data.frame(FSC.A=NA,SSC.A=NA,FL1.A=NA,WELL=NA,STRAIN=NA)
+stats.data <- data.frame(WELL=NA,STRAIN=NA,COUNT=NA,MEDIAN=NA,MEAN=NA,SD=NA,VAR=NA)
+
+for(i in 1:length(filterData)){
+  fsc.a <- exprs(filterData[[i,1]])
+  ssc.a <- exprs(filterData[[i,2]])
+  fl1.a <- exprs(filterData[[i,3]])
+  well <- unlist(strsplit(rownames(pData(filterData)),'.fcs'))[i]
+  strain <- as.character(sample.sheet[i,3])
+  
+  filter.data<-rbind(filter.data,cbind(FSC.A=fsc.a,SSC.A=ssc.a,FL1.A=fl1.a,WELL=well,STRAIN=strain))
+  
+  stats.data<-(rbind(stats.data,cbind(WELL=well,STRAIN=strain,COUNT=length(fsc.a),MEDIAN=median(fl1.a/fsc.a),MEAN=mean(fl1.a/fsc.a),SD=sd(fl1.a/fsc.a),VAR=as.numeric(var(fl1.a/fsc.a)))))
+}  
+  
+ #Cleans up DataFrames
+  filter.data<-filter.data[2:nrow(filter.data),]
+  filter.data$FSC.A<-as.numeric(filter.data$FSC.A)
+  filter.data$SSC.A<-as.numeric(filter.data$SSC.A)
+  filter.data$FL1.A<-as.numeric(filter.data$FL1.A)
+  filter.data$WELL<-as.factor(filter.data$WELL)
+  filter.data$STRAIN<-as.factor(filter.data$STRAIN)
+  
+  stats.data<-stats.data[2:nrow(stats.data),]
+  stats.data$WELL<-as.factor(stats.data$WELL)
+  stats.data$STRAIN<-as.factor(stats.data$STRAIN)
+  stats.data$COUNT<-as.numeric(stats.data$COUNT)
+  stats.data$MEDIAN<-as.numeric(stats.data$MEDIAN)
+  stats.data$MEAN<-as.numeric(stats.data$MEAN)    
+  stats.data$SD<-as.numeric(stats.data$SD)
+  stats.data$VAR<-as.numeric(stats.data$VAR)
+  
+```
+
+#Z-Scores
+```{r}
+#Caluclates the mean and standard deviation of the GFP Signal normalized by forward scatter from the HIS3KO_Proline Control Strains
+m.ctrl <- mean(filter.data$FL1.A[filter.data$STRAIN=='HIS3KO_Pro_Lim']/filter.data$FSC.A[filter.data$STRAIN=='HIS3KO_Pro_Lim'])
+sd.ctrl <- sd(filter.data$FL1.A[filter.data$STRAIN=='HIS3KO_Pro_Lim']/filter.data$FSC.A[filter.data$STRAIN=='HIS3KO_Pro_Lim'])
+  
+#Caluclates the mean and standard deviation of the GFP Signal normalized by forward scatter  from the HIS3KO strains
+m.HIS3KO <- mean(filter.data$FL1.A[filter.data$STRAIN=='YOR202W_HIS3']/filter.data$FSC.A[filter.data$STRAIN=='YOR202W_HIS3'])
+sd.HIS3KO <- sd(filter.data$FL1.A[filter.data$STRAIN=='YOR202W_HIS3']/filter.data$FSC.A[filter.data$STRAIN=='YOR202W_HIS3'])
+
+#Caluclates the mean and standard deviation of the GFP Signal normalized by forward scatter  from the plate
+m.pop <- mean(filter.data$FL1.A/filter.data$FSC.A)
+sd.pop <- sd(filter.data$FL1.A/filter.data$FSC.A)
+
+#creates an empty variable to store the z.scores
+z_scores <- data.frame(Strain=NA, Well=NA, Z_Score_Ctrl=NA, Z_Score_HIS3KO=NA, Z_Score_Pop=NA)
+
+#calucaltes the z-scores based on the well's standard deviation from either all the populations of the plate or the populations of HIS3KO
+for(i in 1:nrow(sample.sheet)){
+  
+  z.ctrl <- (stats.data$MEAN[i]-m.ctrl)/sd.ctrl
+  z.HIS3KO <- (stats.data$MEAN[i]-m.HIS3KO)/sd.HIS3KO
+  z.pop <- (stats.data$MEAN[i]-m.pop)/sd.pop
+  
+  z_scores <- rbind(z_scores, cbind(Strain=as.character(sample.sheet$Strain[i]),Well=as.character(sample.sheet$Well[i]),Z_Score_Ctrl=z.ctrl,Z_Score_HIS3KO=z.HIS3KO,Z_Score_Pop=z.pop))
+}
+
+#cleans-up the list of z-scores
+  z_scores<-z_scores[2:nrow(z_scores),]
+  z_scores$Strain<-as.factor(z_scores$Strain)
+  z_scores$Well<-as.factor(z_scores$Well)
+  z_scores$Z_Score_Ctrl<-as.numeric(z_scores$Z_Score_Ctrl)
+  z_scores$Z_Score_HIS3KO<-as.numeric(z_scores$Z_Score_HIS3KO)
+  z_scores$Z_Score_Pop<-as.numeric(z_scores$Z_Score_Pop)
+```
+
+#Identifying Mutants of Interest
+```{r}
+  #Create the data frame to store the flagged wells
+  flag.data <- data.frame(STRAIN=sample.sheet$Strain, WELL=sample.sheet$Well,Z_Score_Ctrl=FALSE,Z_Score_HIS3KO=FALSE,Z_Score_Pop=FALSE,Count=FALSE)
+  
+  #Goes through each well and sets each flagged value to TRUE
+  for(i in 1:nrow(flag.data)){
+    if(abs(z_scores$Z_Score_Ctrl[i])>=threshold.z_scores){flag.data$Z_Score_Ctrl[i] <- TRUE}
+    if(abs(z_scores$Z_Score_HIS3KO[i])>=threshold.z_scores){flag.data$Z_Score_HIS3KO[i] <- TRUE}
+    if(abs(z_scores$Z_Score_Pop[i])>=threshold.z_scores){flag.data$Z_Score_Pop[i] <- TRUE}
+    if(abs(stats.data$COUNT[i])<threshold.count){flag.data$Count[i] <- TRUE}
+  }
+```
+
+#Add Flags to Filtered Data dataframe
+```{r}
+    #Combines the flagged well data, and the actual data in one data frame. This seems to be nessasry to easily plot the data
+    filter.data <- cbind(filter.data, Z_Score_HIS3KO=FALSE, Count=FALSE)
+    od.data <- cbind(od.data, Z_Score_HIS3KO=FALSE, Count=FALSE)
+    
+  
+  for(i in 1:nrow(filter.data)){
+    if(abs(z_scores$Z_Score_HIS3KO[z_scores$Well==filter.data$WELL[i]])>=threshold.z_scores){filter.data$Z_Score_HIS3KO[i] <- TRUE}
+    if(abs(stats.data$COUNT[z_scores$Well==filter.data$WELL[i]])<threshold.count){filter.data$Count[i] <- TRUE}
+  }
+  for(i in 1:nrow(od.data)){
+    if(abs(z_scores$Z_Score_HIS3KO[z_scores$Well==od.data$WELL[i]])>=threshold.z_scores){od.data$Z_Score_HIS3KO[i] <- TRUE}
+    if(abs(stats.data$COUNT[z_scores$Well==od.data$WELL[i]])<threshold.count){od.data$Count[i] <- TRUE}
+  }
+    
+```
+
+#Stats and Flagged Mutants
+```{r}
+    # Prints out the stats and the flagged data
+    print(stats.data)
+    
+    print(z_scores)
+    
+    print(flag.data)
+```
+
+#Plots of Flagged Data
+```{r}
+  #Plots the flagged data's Forward vs. Side Scatter Plots, and FL1 vs Forward Plots, plus the OD of the wells. All compared to the HIS3KO wells
+  flagged.plots <- list()
+  flagged.plots[[1]] <- ggplot(subset(filter.data,((filter.data$STRAIN=='YOR202W_HIS3')|(filter.data$Z_Score_HIS3KO==TRUE))), aes(x = FSC.A, y = SSC.A))+
+    geom_hex(bins=512)+
+    facet_wrap(~STRAIN,ncol=4)+
+    theme(legend.position="none")+
+    labs(title= paste("FSC.AvSSC.A_Filtered_Plate",plate,"_",condition, sep="")) +
+    scale_x_log10()+
+    scale_y_log10()
+  flagged.plots[[2]] <- ggplot(subset(filter.data,((filter.data$STRAIN=='YOR202W_HIS3')|(filter.data$Z_Score_HIS3KO==TRUE))), aes(x = FSC.A, y = FL1.A))+
+    geom_hex(bins=512)+
+    facet_wrap(~STRAIN,ncol=4)+
+    theme(legend.position="none")+
+    labs(title= paste("FSC.AvFL1.A_Filtered_Plate",plate,"_",condition, sep="")) +
+    scale_x_log10()+
+    scale_y_log10()
+#Plot of OD Data
+  flagged.plots[[3]] <-ggplot(subset(od.data,((od.data$STRAIN=='YOR202W_HIS3')|(od.data$Z_Score_HIS3KO==TRUE))), aes(WELL,OD))+
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90,vjust=0.5,hjust = 1, size = 6)) +
+    geom_point() +
+    labs(title= paste("ODs_Plate",plate,"_",condition, sep="")) +
+    scale_x_discrete(labels=subset(od.data$STRAIN,((od.data$STRAIN=='YOR202W_HIS3')|(od.data$Z_Score_HIS3KO==TRUE))))+
+    xlab("STRAIN")
+  
+  flagged.plots
+  
+    ggsave(paste(path.save,"Flagged_Strains_Plate",plate,"_",condition,"_Threshold_",threshold.z_scores,".pdf", sep=""), plot=  marrangeGrob(grobs = flagged.plots, nrow=1, ncol=1),
+ height=8, width=12)
+    
+```
+
+#Plots of Data
+```{r eval=FALSE}
+  # Set to FALSE because I want to only look at the flagged data
+  #Plots all the wells forward vs side plots, and the boxplots of the various paramenters, and OD
+dir.create(paste(paste(path.save,"Plate",plate,"_PDFs/",sep="")))
+#Plots of FSC VS SSC
+size.plots <- list()
+left <- 1
+right <- sum(stats.data$COUNT[1:18])
+size.plots[[1]] <- ggplot(filter.data[left:right,], aes(x = FSC.A, y = SSC.A))+
+    geom_hex(bins=512)+
+    facet_wrap(~ WELL + STRAIN,nrow=3)+
+    theme(legend.position="none")+
+    labs(title= paste("FSC.AvSSC.A_Filtered_Plate",plate,"_",condition,"_Page",1, sep="")) +
+    scale_x_log10()+
+    scale_y_log10()
+
+for(i in 2:((ceiling(nrow(stats.data)/18))-1)){
+  left <- right+1
+  right <- right+sum(stats.data$COUNT[(1+(18*(i-1))):(18+(18*(i-1)))])
+  
+  size.plots[[i]] <- ggplot(filter.data[left:right,], aes(x = FSC.A, y = SSC.A))+
+    geom_hex(bins=512)+
+    facet_wrap(~ WELL + STRAIN,nrow=3)+
+    theme(legend.position="none")+
+    labs(title= paste("FSC.AvSSC.A_Filtered_Plate",plate,"_",condition,"_Page",i, sep="")) +
+    scale_x_log10()+
+    scale_y_log10()
+}
+
+i<-i+1
+left <- right+1
+size.plots[[ceiling(nrow(stats.data)/18)]] <- ggplot(filter.data[left:nrow(filter.data),], aes(x = FSC.A, y = SSC.A))+
+    geom_hex(bins=512)+
+    facet_wrap(~ WELL + STRAIN,nrow=3)+
+    theme(legend.position="none")+
+    labs(title= paste("FSC.AvSSC.A_Filtered_Plate",plate,"_",condition,"_Page",i, sep="")) +
+    scale_x_log10()+
+    scale_y_log10()
+
+size.plots
+ggsave(paste(path.save,"Plate",plate,"_PDFs/FSC.AvsSSC.A_Filtered_Plate",plate,"_",condition,".pdf", sep=""), plot=size.plots height=8, width=12)
+    
+    
+#Plots of FSC Data
+ggplot(filter.data, aes(WELL,FSC.A)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90,vjust=0.5,hjust = 1, size = 6)) +
+    stat_boxplot(geom ='errorbar') +
+    geom_boxplot(outlier.shape = NA) +
+    labs(title= paste("FSC.A_Filtered_Plate",plate,"_",condition, sep="")) +
+    scale_y_log10()+
+    scale_x_discrete(labels=sample.sheet$Strain)+
+    xlab("STRAIN")
+ggsave(paste(path.save,"Plate",plate,"_PDFs/FSC.A_Filtered_Plate",plate,"_",condition,".pdf", sep=""), height=8, width=12)
+
+#Plots of SSC Data
+ggplot(filter.data, aes(WELL,SSC.A)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90,vjust=0.5,hjust = 1, size = 6)) +
+    stat_boxplot(geom ='errorbar') +
+    geom_boxplot(outlier.shape = NA) +
+    labs(title= paste("SSC.A_Filtered_Plate",plate,"_",condition, sep="")) +
+    scale_y_log10()+
+    scale_x_discrete(labels=sample.sheet$Strain)+
+    xlab("STRAIN")
+ggsave(paste(path.save,"Plate",plate,"_PDFs/SSC.A_Filtered_Plate",plate,"_",condition,".pdf", sep=""), height=8, width=12)
+
+#Plot of FL1 Data
+ggplot(filter.data, aes(WELL,FL1.A)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90,vjust=0.5,hjust = 1, size = 6)) +
+    stat_boxplot(geom ='errorbar') +
+    geom_boxplot(outlier.shape = NA) +
+    labs(title= paste("FL1.A_Filtered_Plate",plate,"_",condition, sep="")) +
+    scale_y_log10()+
+    scale_x_discrete(labels=sample.sheet$Strain)+
+    xlab("STRAIN")
+ggsave(paste(path.save,"Plate",plate,"_PDFs/F1.A_Filtered_Plate",plate,"_",condition,".pdf", sep=""), height=8, width=12)
+
+#Plot of FL1/FSC Data
+ggplot(filter.data, aes(WELL,(FL1.A/FSC.A))) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90,vjust=0.5,hjust = 1, size = 6)) +
+    stat_boxplot(geom ='errorbar') +
+    geom_boxplot(outlier.shape = NA) +
+    labs(title= paste("FL1.A/FSC.A_Filtered_Plate",plate,"_",condition, sep="")) +
+    scale_y_log10()+
+    scale_x_discrete(labels=sample.sheet$Strain)+
+    xlab("STRAIN")
+ggsave(paste(path.save,"Plate",plate,"_PDFs/FL1.ANormFSC.A_Filtered_Plate",plate,"_",condition,".pdf", sep=""), height=8, width=12)
+
+#Plot of OD Data
+ggplot(od.data, aes(WELL,OD))+
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90,vjust=0.5,hjust = 1, size = 6)) +
+    geom_point() +
+    labs(title= paste("ODs_Plate",plate,"_",condition, sep="")) +
+    scale_x_discrete(labels=sample.sheet$Strain)+
+    xlab("STRAIN")
+ggsave(paste(path.save,"Plate",plate,"_PDFs/ODs_Plate",plate,"_",condition,".pdf", sep=""), height=8, width=12)
+```

@@ -57,10 +57,17 @@ library(gridExtra)
 
 #Variables for scanning through mulitple plates
 
+<<<<<<< HEAD
 plate <- "14TestRun" #Plate number, under 10 need 0#
 condition <- "ProLim" #Media type and/or other conditions, SC or ProLim
 path.data <-"~/Google Drive/Transfer_Folder/GAP1_GFP_Screen/" #location of data files
 path.save <-"~/Google Drive/Transfer_Folder/GAP1_GFP_Screen/Reports"#location to save files
+=======
+plate <- "19" #Plate number, under 10 need 0#
+condition <- "ProLim" #Media type and/or other conditions, SC or ProLim
+path.data <-"~/Google Drive/Transfer_Folder/GAP1_GFP_Screen/" #location of data files
+path.save <-"~/Flow_Cytometry_Analysis/GAP1-GFP_Screen/Reports"#location to save files
+>>>>>>> 00b624f77b837fd206ffc1eec132cde541d161d8
 
   threshold.z_scores <- 2 # cutoff for z-scores to isolate
   threshold.count <- 10000 # cutoff for number of events to isolate

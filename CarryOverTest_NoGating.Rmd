@@ -1,0 +1,222 @@
+---
+title: "Flow_Cytometry_GAP1:GFP Screen Analysis"
+author: "Nathan Brandt"
+date: "Sept 19th, 2016"
+output: html_document
+---
+#1) Two samples in four media types analyzed on the Accuri in triplicate .
+#    Strains-
+#     GAP1::GFP KO Collection Pool
+#     Strains have GFP fused with GAP1 and tdTomato expressed under the ACT1 promoter in the HO locus
+#    Media Types-
+#     SC
+#     Proline Limited Media
+#   Controls-
+#      FY4 in Proline Limited Media
+#      FY4 in SC Media
+#      GFP::GAP1 HISKO in Proline Limited Media
+#      GFP::GAP1 HISKO in SC Media
+
+###This code is designed for use with the Accuri flow cytometer, which is equiped with the following lasers and filters
+* Blue laser (488 nm)
+  + FL1 filter = 514/20nm   GFP
+  + FL3 filter = 575/25nm   YFP
+
+* Yellow/green laser (552 nm)
+  + FL2 filter = 610/20nm   mCherry, dtomato
+  + FL4 filter = 586/15nm   DsRed
+
+******
+##Step 1: Load relevant libraries 
+
+```{r}
+#Load libraries
+library(flowCore)
+library(flowViz)
+library(flowQ)
+library(flowStats)
+library(Hmisc)
+library(reshape2)
+library(ggplot2)
+library(flowWorkspace)
+library(ggcyto)
+library(gridExtra)
+```
+
+###Step 2: Read in all .fcs files in current directory and a sample sheet that contains four columns with 
+* column1 = Well
+* column2 = Strain
+* column3 = Genotype
+* column4 = Ploidy
+* column5 = Media
+
+
+```{r}
+#Set working directory to the folder in which you have stored your .fcs files
+#Read in all the fcs files in the directory, with alter.ames changing "-" to "."
+
+path.data <-"~/Google Drive/Transfer_Folder/" #location of data files
+path.save <-"~/Flow_Cytometry_Analysis/CarryOverScreen/Reports/"#location to save files
+
+ #Create Folders to store pdf files
+
+samplesize <- NULL #Number of Random Lines from the FSC files to read in, set to NULL to read all lines
+
+flowData <- read.flowSet(path = paste(path.data,"Well_Cross_Over_Test", sep=""), pattern=".fcs", which.lines=samplesize, alter.names=TRUE)
+
+sample.sheet <- read.csv(paste(path.data,"Well_Cross_Over_Test/SampleSheet.csv", sep=""))
+
+#Adds a Strain identifier to the pData
+pData(flowData)$strain <- sample.sheet$Strain
+
+```
+
+#Gating of data, and filtering
+```{r}
+
+##Apply a rectangle gate based on FSC and SSC to remove values that we have determined are typically debris for haploid cells.  This should be adjusted if the cell type is different
+rectGate <- rectangleGate("FSC.A"= c(5.6,7.6),"SSC.A" = c(4.6,6.8))
+
+boundaries <- matrix(c(2e5,6e5,1.5e6,5e6,1.5e6,5e5,3e5,2.5e4,2.5e4,1e5,1e6,1e6,5e5,3e5),ncol=2,nrow=7)
+colnames(boundaries) <- c("FSC.A","SSC.A")
+polyGate <- sapply(sampleNames(flowData),function(sn)polygonGate(.gate = boundaries))
+
+#Subset the filtered data to remove outliers defined by FFC and SSC 
+filterData <- flowData#Subset(flowData, rectGate) 
+```
+
+
+
+#Transfer data into a dataframe and produce summary stats
+```{r}
+#Summary Statistics of Normalized Filtered Data
+#Move filtered data into a dataframe
+filter.data <- data.frame(FSC.A=NA,SSC.A=NA,FL1.A=NA,WELL=NA,STRAIN=NA)
+stats.data <- data.frame(WELL=NA,STRAIN=NA,COUNT=NA,MEDIAN=NA,MEAN=NA,SD=NA,VAR=NA)
+
+for(i in 1:length(filterData)){
+  fsc.a <- exprs(filterData[[i,1]])
+  ssc.a <- exprs(filterData[[i,2]])
+  fl1.a <- exprs(filterData[[i,3]])
+  well <- unlist(strsplit(rownames(pData(filterData)),'.fcs'))[i]
+  strain <- as.character(sample.sheet[i,2])
+  
+  filter.data<-rbind(filter.data,cbind(FSC.A=fsc.a,SSC.A=ssc.a,FL1.A=fl1.a,WELL=well,STRAIN=strain))
+  
+  stats.data<-(rbind(stats.data,cbind(WELL=well,STRAIN=strain,COUNT=length(fsc.a),MEDIAN=median(fl1.a/fsc.a),MEAN=mean(fl1.a/fsc.a),SD=sd(fl1.a/fsc.a),VAR=as.numeric(var(fl1.a/fsc.a)))))
+}  
+  
+ #Cleans up DataFrames
+  filter.data<-filter.data[2:nrow(filter.data),]
+  filter.data$FSC.A<-as.numeric(filter.data$FSC.A)
+  filter.data$SSC.A<-as.numeric(filter.data$SSC.A)
+  filter.data$FL1.A<-as.numeric(filter.data$FL1.A)
+  filter.data$WELL<-as.factor(filter.data$WELL)
+  filter.data$STRAIN<-as.factor(filter.data$STRAIN)
+  
+  stats.data<-stats.data[2:nrow(stats.data),]
+  stats.data$WELL<-as.factor(stats.data$WELL)
+  stats.data$STRAIN<-as.factor(stats.data$STRAIN)
+  stats.data$COUNT<-as.numeric(stats.data$COUNT)
+  stats.data$MEDIAN<-as.numeric(stats.data$MEDIAN)
+  stats.data$MEAN<-as.numeric(stats.data$MEAN)    
+  stats.data$SD<-as.numeric(stats.data$SD)
+  stats.data$VAR<-as.numeric(stats.data$VAR)
+  
+```
+
+
+#Plots of Data
+```{r eval=FALSE}
+  # Set to FALSE because I want to only look at the flagged data
+  #Plots all the wells forward vs side plots, and the boxplots of the various paramenters, and OD
+#Plots of FSC VS SSC
+ggplot(subset(filter.data, filter.data$WELL==sample.sheet$Well[1:12]), aes(x = FSC.A, y = SSC.A))+
+    geom_hex(bins=512)+
+    facet_wrap(~ WELL + STRAIN,ncol=6)+
+    theme(legend.position="none")+
+    scale_x_log10()+
+    scale_y_log10()
+
+#Plots of FSC VS FL1
+ggplot(subset(filter.data, filter.data$WELL==sample.sheet$Well[1:12]), aes(x = FSC.A, y = FL1.A))+
+    geom_hex(bins=128)+
+    facet_wrap(~ WELL + STRAIN,ncol=6)+
+    theme(legend.position="none")+
+    scale_x_log10()+
+    scale_y_log10()
+
+ggplot(subset(filter.data, filter.data$WELL==sample.sheet$Well[13:24]), aes(x = FSC.A, y = FL1.A))+
+    geom_hex(bins=128)+
+    facet_wrap(~ WELL + STRAIN,ncol=6)+
+    theme(legend.position="none")+
+    scale_x_log10()+
+    scale_y_log10()
+
+ggplot(subset(filter.data, filter.data$WELL==sample.sheet$Well[25:36]), aes(x = FSC.A, y = FL1.A))+
+    geom_hex(bins=128)+
+    facet_wrap(~ WELL + STRAIN,ncol=6)+
+    theme(legend.position="none")+
+    scale_x_log10()+
+    scale_y_log10()
+
+ggplot(subset(filter.data, filter.data$WELL==sample.sheet$Well[37:48]), aes(x = FSC.A, y = FL1.A))+
+    geom_hex(bins=128)+
+    facet_wrap(~ WELL + STRAIN,ncol=6)+
+    theme(legend.position="none")+
+    scale_x_log10()+
+    scale_y_log10()
+
+#ggsave(paste(path.save,"Plate",plate,"_PDFs/FSC.AvsSSC.A_Filtered_Plate",plate,"_",condition,".pdf", sep=""), plot=size.plots height=8, width=12)
+    
+    
+#Plots of FSC Data
+ggplot(filter.data, aes(WELL,FSC.A)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90,vjust=0.5,hjust = 1, size = 6)) +
+    stat_boxplot(geom ='errorbar') +
+    geom_boxplot(outlier.shape = NA) +
+    labs(title= paste("FSC.A_Filtered_Plate",plate,"_",condition, sep="")) +
+    scale_y_log10()+
+    scale_x_discrete(labels=sample.sheet$Strain)+
+    xlab("STRAIN")
+ggsave(paste(path.save,"Plate",plate,"_PDFs/FSC.A_Filtered_Plate",plate,"_",condition,".pdf", sep=""), height=8, width=12)
+
+#Plots of SSC Data
+ggplot(filter.data, aes(WELL,SSC.A)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90,vjust=0.5,hjust = 1, size = 6)) +
+    stat_boxplot(geom ='errorbar') +
+    geom_boxplot(outlier.shape = NA) +
+    labs(title= paste("SSC.A_Filtered_Plate",plate,"_",condition, sep="")) +
+    scale_y_log10()+
+    scale_x_discrete(labels=sample.sheet$Strain)+
+    xlab("STRAIN")
+ggsave(paste(path.save,"Plate",plate,"_PDFs/SSC.A_Filtered_Plate",plate,"_",condition,".pdf", sep=""), height=8, width=12)
+
+#Plot of FL1 Data
+ggplot(filter.data, aes(WELL,FL1.A)) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90,vjust=0.5,hjust = 1, size = 6)) +
+    stat_boxplot(geom ='errorbar') +
+    geom_boxplot(outlier.shape = NA) +
+    labs(title= paste("FL1.A_Filtered_Plate",plate,"_",condition, sep="")) +
+    scale_y_log10()+
+    scale_x_discrete(labels=sample.sheet$Strain)+
+    xlab("STRAIN")
+ggsave(paste(path.save,"Plate",plate,"_PDFs/F1.A_Filtered_Plate",plate,"_",condition,".pdf", sep=""), height=8, width=12)
+
+#Plot of FL1/FSC Data
+ggplot(filter.data, aes(WELL,(FL1.A/FSC.A))) +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 90,vjust=0.5,hjust = 1, size = 6)) +
+    stat_boxplot(geom ='errorbar') +
+    geom_boxplot(outlier.shape = NA) +
+    labs(title= paste("FL1.A/FSC.A_Filtered_Plate",plate,"_",condition, sep="")) +
+    scale_y_log10()+
+    scale_x_discrete(labels=sample.sheet$Strain)+
+    xlab("STRAIN")
+ggsave(paste(path.save,"Plate",plate,"_PDFs/FL1.ANormFSC.A_Filtered_Plate",plate,"_",condition,".pdf", sep=""), height=8, width=12)
+
+
+```

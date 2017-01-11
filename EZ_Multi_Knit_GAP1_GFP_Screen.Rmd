@@ -1,0 +1,26 @@
+
+ ---
+title: "EZ_Multi_Knit_GAP1_GFP_Screen"
+output: html_document
+---
+```{r}
+library(ezknitr)
+```
+
+```{r}
+media <- c("ProLim","SC")
+for(j in 1:2){
+for(i in 11:12){
+  ifelse(i <10, plate <- paste("0",i,sep=""), plate<-i) #Plate under 10 need 0
+  condition <- media[j] #SC or ProLim
+  path.data <-"~/Google Drive/Transfer_Folder/" #location of data files
+  path.save <-"~/Flow_Cytometry_Analysis/GAP1_GFP_Screen_09192016/Reports/"#location to save files
+  threshold.z_scores <- 2
+  threshold.count <- 10000
+
+  samplesize <- NULL #Number of Random Lines from the FSC files to read in, set to NULL to read all lines
+
+  ezknit(file="~/Flow_Cytometry_Analysis/GAP1_GFP_Screen_09192016/GAP1_GFP_Screen_09192016.rmd", out_dir ="~/Flow_Cytometry_Analysis/GAP1_GFP_Screen_09192016/Reports/",  out_suffix=paste(condition,"_",plate, sep=""), params=list('plate'=plate,'condition'=condition,'path.data'=path.data,'path.save'=path.save,'samplesize'=samplesize,'threshold.z_scores'=threshold.z_scores,'threshold.count'=threshold.count), keep_html=TRUE, verbose=TRUE)
+}
+}
+```

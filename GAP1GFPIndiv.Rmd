@@ -1,0 +1,387 @@
+---
+title: "GAP2_GFP_Screen_Individuals"
+author: "Nathan Brandt"
+date: "Oct 31st, 2016"
+output: html_document
+---
+#1) Two samples in four media types analyzed on the Accuri in triplicate .
+#    Strains-
+#     GAP1::GFP KO Collection Pool
+#     Strains have GFP fused with GAP1 and tdTomato expressed under the ACT1 promoter in the HO locus
+#    Media Types-
+#     SC
+#     Proline Limited Media
+#   Controls-
+#      FY4 in Proline Limited Media
+#      FY4 in SC Media
+#      GFP::GAP1 HISKO in Proline Limited Media
+#      GFP::GAP1 HISKO in SC Media
+
+###This code is designed for use with the Accuri flow cytometer, which is equiped with the following lasers and filters
+* Blue laser (488 nm)
+  + FL1 filter = 514/20nm   GFP
+  + FL3 filter = 575/25nm   YFP
+
+* Yellow/green laser (552 nm)
+  + FL2 filter = 610/20nm   mCherry, dtomato
+  + FL4 filter = 586/15nm   DsRed
+  
+******
+##Step 1: Load relevant libraries 
+
+```{r}
+#Load libraries
+library(flowCore)
+library(flowViz)
+library(flowQ)
+library(flowStats)
+library(Hmisc)
+library(reshape2)
+library(ggplot2)
+library(flowWorkspace)
+library(ggcyto)
+library(gridExtra)
+```
+
+###Step 2: Read in all .fcs files in current directory and a sample sheet that contains four columns with 
+* column1 = Well
+* column2 = Strain
+* column3 = Genotype
+* column4 = Ploidy
+* column5 = Media
+
+```{r}
+#Set working directory to the folder in which you have stored your .fcs files
+#Read in all the fcs files in the directory, with alter.ames changing "-" to "."
+
+
+#Variables for scanning through mulitple plates
+plate <- "10" #Plate number, under 10 need 0#
+condition <- "ProLim" #Media type and/or other conditions, SC or ProLim
+path.data <-"~/Google Drive/Transfer_Folder/" #location of data files
+path.save <-"~/Flow_Cytometry_Analysis/GAP1_GFP_Indiv_Screen_10302016/Reports/"#location to save files
+
+/Users/nathanbrandt/Google Drive/Transfer_Folder/GAP1_GFP_Single_Colony_Screen
+ #Create Folders to store pdf files
+
+
+
+threshold.z_scores <- 2 # cutoff for z-scores to isolate
+threshold.count <- 10000 # cutoff for number of events to isolate
+
+samplesize <- NULL #Number of Random Lines from the FSC files to read in, set to NULL to read all lines
+
+flowData <- read.flowSet(path = paste(path.data,"GAP1_GFP_Single_Colony_Screen", sep=""), pattern=".fcs", which.lines=samplesize, alter.names=TRUE)
+
+sample.sheet <- read.csv(paste(path.data,"GAP1_GFP_Single_Colony_Screen/SampleSheet_Indiv.csv", sep=""))
+
+#Adds a Strain identifier to the pData
+pData(flowData)$strain <- sample.sheet$Strain
+
+```
+
+#Gating of data, and filtering
+*Removes doublets
+*Applies a different gate to the samples base on whether it is SC or ProLim media
+```{r}
+#Need code for eliminating potential doublets
+#Need code for swithcing gates between SC and ProLim
+#Need code to keep track of Total counts and filtered counts
+#Anything Else????
+
+##Apply a rectangle gate based on FSC and SSC to remove values that we have determined are typically debris for haploid cells.  This should be adjusted if the cell type and media type is different
+rectGate <- sapply(sampleNames(flowData),function(sn)rectangleGate("FSC.A"= c(3e5,4e6),"SSC.A" = c(3e4,1e6)))
+
+boundaries <- matrix(c(2e5,6e5,1.5e6,5e6,1.5e6,5e5,3e5,2.5e4,2.5e4,1e5,1e6,1e6,5e5,3e5),ncol=2,nrow=7)
+colnames(boundaries) <- c("FSC.A","SSC.A")
+polyGate <- sapply(sampleNames(flowData),function(sn)polygonGate(.gate = boundaries))
+
+
+##Plot Foward vs. Scatter using ggcyto Use to help gate
+#Row A
+ggcyto(flowData[1:6],aes(x = FSC.A, y = SSC.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+  geom_stats()+
+  labs(title= paste("FSC.AvSSC.A_Row_A",sep=""))
+
+#Column B
+ggcyto(flowData[13:24],aes(x = FSC.A, y = SSC.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+  geom_stats()+
+  labs(title= paste("FSC.AvSSC.A_Plate",plate,"_",condition,"_Column_B",sep=""))
+
+#Column C
+ggcyto(flowData[25:36],aes(x = FSC.A, y = SSC.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+  geom_stats()+
+  labs(title= paste("FSC.AvSSC.A_Plate",plate,"_",condition,"_Column_C",sep=""))
+
+#Column D
+ggcyto(flowData[37:48],aes(x = FSC.A, y = SSC.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+  geom_stats()+
+  labs(title= paste("FSC.AvSSC.A_Plate",plate,"_",condition,"_Column_D",sep=""))
+
+#Column E
+ggcyto(flowData[49:60],aes(x = FSC.A, y = SSC.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+  geom_stats()+
+  labs(title= paste("FSC.AvSSC.A_Plate",plate,"_",condition,"_Column_E",sep=""))
+
+#Column F
+ggcyto(flowData[61:72],aes(x = FSC.A, y = SSC.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+  geom_stats()+
+  labs(title= paste("FSC.AvSSC.A_Plate",plate,"_",condition,"_Column_F",sep=""))
+
+#Column G
+ggcyto(flowData[73:84],aes(x = FSC.A, y = SSC.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+  geom_stats()+
+  labs(title= paste("FSC.AvSSC.A_Plate",plate,"_",condition,"_Column_G",sep=""))
+
+#Column H
+ggcyto(flowData[85:96],aes(x = FSC.A, y = SSC.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+  geom_stats()+
+  labs(title= paste("FSC.AvSSC.A_Plate",plate,"_",condition,"_Column_H",sep=""))
+
+#Column I
+ggcyto(flowData[97:length(flowData)],aes(x = FSC.A, y = SSC.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+  geom_stats()+
+  labs(title= paste("FSC.AvSSC.A_Plate",plate,"_",condition,"_Column_I",sep=""))
+
+
+#Subset the filtered data to remove outliers defined by FFC and SSC 
+filterData <- Subset(flowData, polyGate) 
+```
+
+
+
+#Grabs to % of filtered events with the gate
+summary(filter(flowData[[1]],polyGate))$p
+result <- filter(flowData[[1]],polyGate)
+
+```{r eval=FALSE}
+##Plot Foward vs. FL1 using ggcyto
+#Column A
+ggcyto(flowData[84:108],aes(x = FSC.A, y = FL1.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  #scale_x_log10()+
+  #scale_y_log10()+
+  xlim(c(0,2e6))+
+  ylim(c(0,5e5))+
+  #geom_gate(rectGate)+
+  #geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+   #geom_stats()+
+  labs(title= paste("FSC.AvFL1.A_Plate",plate,"_",condition,"_Column_A",sep=""))
+
+#Column B
+ggcyto(flowData[13:24],aes(x = FSC.A, y = FL1.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  #geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+   #geom_stats()+
+  labs(title= paste("FSC.AvFL1.A_Plate",plate,"_",condition,"_Column_B",sep=""))
+
+#Column C
+ggcyto(flowData[25:36],aes(x = FSC.A, y = FL1.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  #geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+   #geom_stats()+
+  labs(title= paste("FSC.AvFL1.A_Plate",plate,"_",condition,"_Column_C",sep=""))
+
+#Column D
+ggcyto(flowData[37:48],aes(x = FSC.A, y = FL1.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  #geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+   #geom_stats()+
+  labs(title= paste("FSC.AvFL1.A_Plate",plate,"_",condition,"_Column_D",sep=""))
+
+#Column E
+##Plot Foward vs. Scatter using ggcyto Use to help gate
+ggcyto(flowData[49:60],aes(x = FSC.A, y = FL1.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  #geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+   #geom_stats()+
+  labs(title= paste("FSC.AvFL1.A_Plate",plate,"_",condition,"_Column_E",sep=""))
+
+#Column F
+ggcyto(flowData[61:72],aes(x = FSC.A, y = FL1.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  #geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+   #geom_stats()+
+  labs(title= paste("FSC.AvFL1.A_Plate",plate,"_",condition,"_Column_F",sep=""))
+
+#Column G
+ggcyto(flowData[73:84],aes(x = FSC.A, y = FL1.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  #geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+   #geom_stats()+
+  labs(title= paste("FSC.AvFL1.A_Plate",plate,"_",condition,"_Column_G",sep=""))
+
+#Column H
+ggcyto(flowData[85:96],aes(x = FSC.A, y = FL1.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  #geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+   #geom_stats()+
+  labs(title= paste("FSC.AvFL1.A_Plate",plate,"_",condition,"_Column_H",sep=""))
+
+#Column I
+ggcyto(flowData[97:length(flowData)],aes(x = FSC.A, y = FL1.A))+
+  ggcyto_par_set(facet=facet_wrap(~name + strain, scales="fixed" ))+
+  geom_hex(bins=256)+
+  #scale_x_logicle(w=.5,t=10000,m=4.5)+
+  #scale_y_logicle(w=.5,t=10000,m=4.5)+
+  scale_x_log10()+
+  scale_y_log10()+
+  #geom_gate(rectGate)+
+  #geom_gate(polyGate)+
+  theme(legend.position="none")+
+  labs_cyto(labels="channel")+
+   #geom_stats()+
+  labs(title= paste("FSC.AvFL1.A_Plate",plate,"_",condition,"_Column_I",sep=""))
+
+```

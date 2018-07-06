@@ -54,6 +54,8 @@ requireInstall <- function(packageName,isBioconductor=F) {
 
 #Load libraries
 requireInstall("tidyverse")
+requireInstall("flowCore")
+requireInstall("flowViz")
 ```
 
 ## Including Plots

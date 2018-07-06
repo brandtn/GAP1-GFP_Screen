@@ -1,0 +1,66 @@
+---
+title: "Flow_Cytometry_GAP1::GFP_Screen_Tidy"
+author: "Nathan Brandt"
+date: "7/6/2018"
+output: html_document
+---
+
+#1) Two samples in four media types analyzed on the Accuri in triplicate .
+#    Strains-
+#     GAP1::GFP KO Collection Pool
+#     Strains have GFP fused with GAP1 and tdTomato expressed under the ACT1 promoter in the HO locus
+#    Media Types-
+#     SC
+#     Proline Limited Media
+#   Controls-
+#      FY4 in Proline Limited Media
+#      FY4 in SC Media
+#      GFP::GAP1 HISKO in Proline Limited Media
+#      GFP::GAP1 HISKO in SC Media
+
+###This code is designed for use with the Accuri flow cytometer, which is equiped with the following lasers and filters
+* Blue laser (488 nm)
+  + FL1 filter = 514/20nm   GFP
+  + FL3 filter = 575/25nm   YFP
+
+* Yellow/green laser (552 nm)
+  + FL2 filter = 610/20nm   mCherry, dtomato
+  + FL4 filter = 586/15nm   DsRed
+
+******
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Step 1: Load relevant libraries 
+
+```{r}
+# This is a function that just makes sure you have a package, or installs it for you without prompting
+
+requireInstall <- function(packageName,isBioconductor=F) {
+  if ( !try(require(packageName,character.only=T)) ) {
+    print(paste0("You don't have ",packageName," accessible, ",
+      "I'm gonna install it"))
+    if (isBioconductor) {
+      source("http://bioconductor.org/biocLite.R")                        
+      biocLite(packageName)                                                 
+    } else {
+      install.packages("packageName", repos = "http://cran.us.r-project.org")
+    }
+  }
+  return(1)
+}
+
+#Load libraries
+requireInstall("tidyverse")
+```
+
+## Including Plots
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+

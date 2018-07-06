@@ -54,7 +54,70 @@ requireInstall <- function(packageName,isBioconductor=F) {
 
 #Load libraries
 requireInstall("tidyverse")
+requireInstall("flowCore")
+requireInstall("flowViz")
 ```
+###Step 2: Read in all .fcs files  and a sample sheet for each set that contains columns with. Load Gates
+* column1 = Well
+* column2 = Strain
+* column3 = Genotype
+* column4 = Ploidy
+* column5 = Media
+
+```{r}
+#Set working directory to the folder in which you have stored your .fcs files
+#Read in all the fcs files in the directory.
+
+path.data <-"~/Google Drive/Gresham Lab_Nathan/FlouresenceProtienAccuriRun/"
+
+list.folders <- c("FP_Run1","FP_Run2","Christiaen_Lab_FP")
+
+flowData <- read.flowSet(path = paste(path.data,list.folders[1],"/", sep=""), pattern=".fcs", alter.names = TRUE)
+
+sample.sheet <- read.csv(paste(path.data,"Samplesheet_",list.folders[1],".csv", sep=""))
+
+#Adds a sample sheet data to the pData of the flowset
+pData(flowData)$Well <- sample.sheet$Well
+pData(flowData)$Strain <- sample.sheet$Strain
+pData(flowData)$Media <- sample.sheet$Media
+pData(flowData)$Genotype <- sample.sheet$Genotype
+pData(flowData)$Ploidy <- sample.sheet$Ploidy
+pData(flowData)$Experiment <- sample.sheet$Experiment
+
+for(i in 2:length(list.folders)) {
+  flowData.temp <- read.flowSet(path = paste(path.data,list.folders[i],"/", sep=""), pattern=".fcs", alter.names = TRUE)
+
+  sample.sheet <- read.csv(paste(path.data,"Samplesheet_",list.folders[i],".csv", sep=""))f
+
+  #Adds a sample sheet data to the pData of the flowset
+  pData(flowData.temp)$Well <- sample.sheet$Well
+  pData(flowData.temp)$Strain <- sample.sheet$Strain
+  pData(flowData.temp)$Media <- sample.sheet$Media
+  pData(flowData.temp)$Genotype <- sample.sheet$Genotype
+  pData(flowData.temp)$Ploidy <- sample.sheet$Ploidy
+  pData(flowData.temp)$Experiment <- sample.sheet$Experiment
+  
+  flowData <- rbind2(flowData, flowData.temp)
+}
+
+
+#load the Rdata file containing the gates
+#load("gates.Rdata") 
+```
+
+
+```{r flowSet summaries}
+#Check how many cells were counted in each fcs file
+fsApply(flowData, each_col, length)[1:length(flowData)]
+total <- fsApply(flowData, each_col, length)[1:length(flowData)]
+
+#Print the medians of data values for each measurement
+fsApply(flowData, each_col, median)
+
+samples.num <- length(flowData)
+
+```
+
 
 ## Including Plots
 

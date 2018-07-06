@@ -33,13 +33,13 @@ output: html_document
 #Load libraries
 library(flowCore)
 library(flowViz)
-#library(flowQ) #Not Availible in R 3.3.1
-#library(flowStats) #Not Availible in R 3.3.2
-#library(Hmisc) #Not Availible in R 3.3.2
+library(flowQ) 
+library(flowStats) 
+library(Hmisc) 
 library(reshape2)
 library(ggplot2)
-#library(flowWorkspace) #Not Availible in R 3.3.2
-#library(ggcyto) #Not Availible in R 3.3.2
+library(flowWorkspace) 
+library(ggcyto) 
 library(gridExtra)
 ```
 
@@ -57,10 +57,10 @@ library(gridExtra)
 
 #Variables for scanning through mulitple plates
 
-plate <- "19" #Plate number, under 10 need 0#
+plate <- "01" #Plate number, under 10 need 0#
 condition <- "ProLim" #Media type and/or other conditions, SC or ProLim
 path.data <-"~/Google Drive/Transfer_Folder/GAP1_GFP_Screen/" #location of data files
-path.save <-"~/Flow_Cytometry_Analysis/GAP1-GFP_Screen/Reports"#location to save files
+path.save <-"~/Google Drive/Transfer_Folder/GAP1_GFP_Screen/Reports"#location to save files
 
   threshold.z_scores <- 2 # cutoff for z-scores to isolate
   threshold.count <- 10000 # cutoff for number of events to isolate
@@ -134,13 +134,13 @@ ggcyto(flowData, aes(x = FSC.A, y = SSC.A), )+
 ```{r eval=FALSE}
 #Not currently using
 ##Plot FL1(GFP) versus FSC 
-ggcyto(flowData[1], aes(x = FL1.A, y = FSC.A))+
+ggplot(flowData[1], aes(x = FL1.A, y = FL4.A))+
   geom_hex(bins=256)+
   scale_x_log10()+
   scale_y_log10()
 
 ##Plot FFS versus SSC
-ggcyto(flowData[1], aes(x = SSC.A, y = FSC.A))+
+ggplot(flowData[1], aes(x = SSC.A, y = FSC.A))+
   geom_hex(bins=256)+
   scale_x_log10()+
   scale_y_log10()

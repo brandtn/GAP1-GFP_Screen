@@ -33,9 +33,10 @@ output: html_document
 #Load libraries
 library(flowCore)
 library(flowViz)
-#library(flowQ) #Not Availible in R 3.3.1
+library(flowQ)
 library(flowStats)
 library(Hmisc)
+library(tidyverse)
 library(reshape2)
 library(ggplot2)
 library(flowWorkspace)
@@ -57,14 +58,14 @@ library(ggcyto)
 plate <- "01" #Plate under 10 need 0#
 condition <- "ProLim" #SC or ProLim
 path.data <-"~/Google Drive/Transfer_Folder/" #location of data files
-dir.create("~/Flow_Cytometry_Analysis/GAP1_GFP_Screen_09192016/SamplingReports/")
-path.save <-"~/Flow_Cytometry_Analysis/GAP1_GFP_Screen_09192016/SamplingReports/"#location to save files
+#dir.create("~/Flow_Cytometry_Analysis/GAP1_GFP_Screen_09192016/SamplingReports/")
+#path.save <-"~/Flow_Cytometry_Analysis/GAP1_GFP_Screen_09192016/SamplingReports/"#location to save files
 
 samplesize <- NULL #Number of Random Lines from the FSC files to read in, set to NULL to read all lines
 
-  flowData <- read.flowSet(path = paste(path.data,"GAP1_GFP_Screen_FSC_Files/Plate",plate,"_",condition, sep=""), pattern=".fcs", which.lines=samplesize, alter.names=TRUE)
+  flowData <- read.flowSet(path = paste(path.data,"GAP1_GFP_Screen/GAP1_GFP_Screen_FSC_Files/Plate",plate,"_",condition, sep=""), pattern=".fcs", which.lines=samplesize, alter.names=TRUE)
 
-  sample.sheet <- read.csv(paste(path.data,"GAP1_GFP_Screen_DataSheets/Plate",plate,"_",condition,".csv", sep=""))
+  sample.sheet <- read.csv(paste(path.data,"GAP1_GFP_Screen/GAP1_GFP_Screen_DataSheets/Plate",plate,"_",condition,".csv", sep=""))
 
 filterData <- flowData
 
